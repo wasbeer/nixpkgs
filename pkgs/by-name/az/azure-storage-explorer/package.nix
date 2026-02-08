@@ -165,12 +165,23 @@ stdenv.mkDerivation rec {
     done
 
     mkdir -p $out/bin
+
+    # Create wrapper for xdg-open that clears LD_LIBRARY_PATH
+    # This prevents library conflicts when launching browsers
+    cat > $out/bin/xdg-open << 'XDGEOF'
+#!/usr/bin/env bash
+# Unset LD_LIBRARY_PATH so the browser uses its own libraries
+unset LD_LIBRARY_PATH
+exec /run/current-system/sw/bin/xdg-open "$@"
+XDGEOF
+    chmod +x $out/bin/xdg-open
+
     makeWrapper \
       ${targetPath}/StorageExplorer \
       $out/bin/azure-storage-explorer \
-      --set LD_LIBRARY_PATH ${rpath} \
+      --prefix LD_LIBRARY_PATH : ${rpath} \
       --set DOTNET_ROOT ${dotnetRoot} \
-      --prefix PATH : ${dotnetRoot} \
+      --prefix PATH : $out/bin:${dotnetRoot} \
       --suffix PATH : ${lib.makeBinPath [ dbus xdg-utils ]} \
       --suffix PATH : /run/current-system/sw/bin
   '';
