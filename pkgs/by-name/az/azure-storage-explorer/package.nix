@@ -142,6 +142,16 @@ stdenv.mkDerivation rec {
       --set-interpreter "${stdenv.cc.bintools.dynamicLinker}" \
       ${targetPath}/StorageExplorerExe
 
+    # Patch azcopy and system-credentials binaries (spawned as child processes,
+    # so they don't inherit LD_LIBRARY_PATH from the wrapper)
+    patchelf \
+      --set-interpreter "${stdenv.cc.bintools.dynamicLinker}" \
+      --set-rpath "${rpath}" \
+      ${targetPath}/resources/app/node_modules/@azure-tools/azcopy-linux/dist/bin/azcopy_linux_amd64
+    patchelf \
+      --set-rpath "${rpath}" \
+      ${targetPath}/resources/app/node_modules/@storage-explorer/system-credentials/build/Release/systemCredentials.node
+
     # Patch and wrap .NET ServiceHub binaries
     for binary in \
       ${targetPath}/resources/app/ServiceHub/Controllers/microsoft-servicehub-controller/Microsoft.ServiceHub.Controller \
