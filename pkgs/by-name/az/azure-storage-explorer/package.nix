@@ -172,7 +172,7 @@ stdenv.mkDerivation rec {
 #!/usr/bin/env bash
 # Unset LD_LIBRARY_PATH so the browser uses its own libraries
 unset LD_LIBRARY_PATH
-exec /run/current-system/sw/bin/xdg-open "$@"
+exec ${xdg-utils}/bin/xdg-open "$@"
 XDGEOF
     chmod +x $out/bin/xdg-open
 
