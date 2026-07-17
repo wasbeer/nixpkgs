@@ -123,7 +123,7 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/{bin,lib,share}
+    mkdir -p $out/{bin,lib,share,libexec/goose}
 
     # The app is a self-contained electron-forge package (its own Electron
     # runtime, resources/app.asar and the bundled `goose` backend).
@@ -136,11 +136,21 @@ stdenv.mkDerivation (finalAttrs: {
     install -Dm644 usr/share/pixmaps/goose.png \
       $out/share/icons/hicolor/512x512/apps/goose.png
 
+    # Electron's bundled ANGLE dlopen()s libEGL.so.1 from libglvnd, which
+    # autoPatchelfHook cannot discover, so the wrapper below has to export
+    # LD_LIBRARY_PATH. That variable is inherited by every child, including the
+    # browser that `xdg-open` spawns for external links -- Goose's older nss
+    # then shadows the browser's own and it dies with an XPCOM/NSS version
+    # error. Shim xdg-open so the handoff to the browser starts from a clean
+    # loader environment; it is placed ahead of xdg-utils on the wrapper's PATH.
+    makeWrapper ${lib.getExe' xdg-utils "xdg-open"} $out/libexec/goose/xdg-open \
+      --unset LD_LIBRARY_PATH
+
     # Nix cannot setuid chrome-sandbox in the store, so always disable it.
     makeWrapper $out/lib/goose/Goose $out/bin/goose-desktop \
       --add-flags "--no-sandbox" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}" \
-      --prefix PATH : "${lib.makeBinPath [ xdg-utils ]}" \
+      --prefix PATH : "$out/libexec/goose:${lib.makeBinPath [ xdg-utils ]}" \
       --prefix LD_LIBRARY_PATH : "${libPath}" \
       --inherit-argv0
 
