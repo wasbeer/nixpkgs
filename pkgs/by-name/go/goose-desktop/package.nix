@@ -7,6 +7,9 @@
   makeWrapper,
   copyDesktopItems,
   makeDesktopItem,
+  nodejs,
+  python3,
+  uv,
   alsa-lib,
   atk,
   at-spi2-atk,
@@ -129,8 +132,34 @@ stdenv.mkDerivation (finalAttrs: {
     # runtime, resources/app.asar and the bundled `goose` backend).
     cp -r usr/lib/goose $out/lib/goose
 
-    # Helper shims (node/npx/uvx/jbang) ship with a /bin/bash shebang.
-    patchShebangs $out/lib/goose/resources/bin
+    # MCP extensions are launched through the helper shims in resources/bin.
+    # Upstream's shims bootstrap cashapp/hermit: they curl a generated hermit
+    # bash script into ~/.config/goose and use it to download prebuilt
+    # python/node/jdk toolchains on first run. Neither half works here -- the
+    # downloaded hermit starts with `#!/bin/bash`, and the toolchains it fetches
+    # are linked against /lib64/ld-linux-x86-64.so.2. Substitute the nixpkgs
+    # toolchains so hermit is never reached. jbang is dropped rather than
+    # wrapped: it would pull a full JDK into the closure, and an extension that
+    # needs it now fails with a plain "not found".
+    rm $out/lib/goose/resources/bin/{node,npx,uvx,jbang,node-setup-common.sh}
+
+    # LD_LIBRARY_PATH set by the launcher below is for Goose's own bundled
+    # Electron; these toolchains resolve their libraries through their rpath and
+    # must not inherit it (same hazard as the xdg-open shim).
+    makeWrapper ${lib.getExe' nodejs "node"} $out/lib/goose/resources/bin/node \
+      --unset LD_LIBRARY_PATH
+
+    makeWrapper ${lib.getExe' nodejs "npx"} $out/lib/goose/resources/bin/npx \
+      --unset LD_LIBRARY_PATH \
+      --prefix PATH : "${lib.makeBinPath [ nodejs ]}"
+
+    # uv defaults to fetching a python-build-standalone interpreter, which
+    # cannot run on NixOS; pin it to the nixpkgs python3 on PATH instead.
+    makeWrapper ${lib.getExe' uv "uvx"} $out/lib/goose/resources/bin/uvx \
+      --unset LD_LIBRARY_PATH \
+      --prefix PATH : "${lib.makeBinPath [ python3 ]}" \
+      --set-default UV_PYTHON_DOWNLOADS never \
+      --set-default UV_PYTHON_PREFERENCE only-system
 
     # Application icon.
     install -Dm644 usr/share/pixmaps/goose.png \
